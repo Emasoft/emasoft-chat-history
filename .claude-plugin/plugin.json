@@ -1,0 +1,10 @@
+{
+  "name": "emasoft-chat-history",
+  "version": "1.0.0",
+  "description": "Automatically exports chat transcripts before compaction to preserve conversation history",
+  "author": {
+    "name": "Emasoft",
+    "email": "713559+Emasoft@users.noreply.github.com"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "mkdir -p .claude/chat_history && /export .claude/chat_history/chat-$(date +%Y%m%d-%H%M%S).md",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
