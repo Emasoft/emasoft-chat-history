@@ -2,10 +2,11 @@
   "hooks": {
     "PreCompact": [
       {
+        "matcher": "auto|manual",
         "hooks": [
           {
             "type": "command",
-            "command": "/export .claude/chat-history/export-$(date +%Y%m%d-%H%M%S).md"
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/scripts/pre_compact_export.py"
           }
         ]
       }
