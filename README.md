@@ -65,13 +65,29 @@ Each export contains:
 - Each subagent transcript in its own collapsed section
 - Debug ERROR/WARN entries as collapsed sections with level badges
 
-## Installation
+## Installation (Production)
+
+Install from the Emasoft marketplace. Use `--scope local` to install only for the current project directory, or `--scope global` for all projects.
 
 ```bash
-claude --plugin-dir /path/to/emasoft-chat-history
+# Add Emasoft marketplace (first time only)
+claude plugin marketplace add emasoft-plugins --url https://github.com/Emasoft/emasoft-plugins
+
+# Install plugin (--scope local = this project only, recommended)
+claude plugin install emasoft-chat-history@emasoft-plugins --scope local
+
+# RESTART Claude Code after installing (required!)
 ```
 
-Or install from the Emasoft marketplace.
+This is a utility plugin — it provides pre-compaction chat export hooks. No `--agent` flag needed; just start Claude Code normally and chat history will be automatically exported before context compaction.
+
+## Development Only (--plugin-dir)
+
+`--plugin-dir` loads a plugin directly from a local directory without marketplace installation. Use only during plugin development.
+
+```bash
+claude --plugin-dir ./OUTPUT_SKILLS/emasoft-chat-history
+```
 
 ## Requirements
 
