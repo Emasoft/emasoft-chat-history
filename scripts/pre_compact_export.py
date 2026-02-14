@@ -139,27 +139,27 @@ def _tool_summary(name: str, inp: dict) -> str:
         desc = inp.get("description", "")
         cmd = inp.get("command", "")
         if desc:
-            return f"Tool: Bash -- {desc}"
+            return f"🔧 Tool: Bash -- {desc}"
         short = cmd[:80] + ("..." if len(cmd) > 80 else "")
-        return f"Tool: Bash -- `{short}`"
+        return f"🔧 Tool: Bash -- `{short}`"
     if name == "Read":
-        return f"Tool: Read -- `{os.path.basename(inp.get('file_path', ''))}`"
+        return f"🔧 Tool: Read -- `{os.path.basename(inp.get('file_path', ''))}`"
     if name in ("Write", "Edit"):
-        return f"Tool: {name} -- `{os.path.basename(inp.get('file_path', ''))}`"
+        return f"🔧 Tool: {name} -- `{os.path.basename(inp.get('file_path', ''))}`"
     if name == "Glob":
-        return f"Tool: Glob -- `{inp.get('pattern', '')}`"
+        return f"🔧 Tool: Glob -- `{inp.get('pattern', '')}`"
     if name == "Grep":
-        return f"Tool: Grep -- `{inp.get('pattern', '')}`"
+        return f"🔧 Tool: Grep -- `{inp.get('pattern', '')}`"
     if name == "Task":
         agent = inp.get("subagent_type", "unknown")
         desc = inp.get("description", "")
-        return f"Subagent ({agent}): {desc}"
+        return f"🤖 Subagent ({agent}): {desc}"
     if name == "WebFetch":
         url = inp.get("url", "")[:60]
-        return f"Tool: WebFetch -- `{url}`"
+        return f"🔧 Tool: WebFetch -- `{url}`"
     if name == "WebSearch":
-        return f"Tool: WebSearch -- `{inp.get('query', '')}`"
-    return f"Tool: {name}"
+        return f"🔧 Tool: WebSearch -- `{inp.get('query', '')}`"
+    return f"🔧 Tool: {name}"
 
 
 def _format_input(name: str, inp: dict) -> str:
@@ -480,13 +480,13 @@ def _render_messages(messages: list[dict], out: list[str]) -> None:
                 if not has_text:
                     continue
 
-            out.append(f"## USER{ts_label}\n")
+            out.append(f'## <span style="color:#2196F3">◆ USER</span>{ts_label}\n')
             text = _text_from_content(content)
             if text.strip():
                 out.append(_clean(text) + "\n")
 
         elif role == "assistant":
-            out.append(f"## ASSISTANT{ts_label}\n")
+            out.append(f'## <span style="color:#4CAF50">◇ ASSISTANT</span>{ts_label}\n')
 
             if isinstance(content, str):
                 out.append(_clean(content) + "\n")
@@ -543,10 +543,15 @@ def _render_messages(messages: list[dict], out: list[str]) -> None:
 
         elif role == "debug":
             level = msg.get("level", "DEBUG")
-            badge = "ERROR" if level == "ERROR" else level
+            if level == "ERROR":
+                badge_html = '<span style="color:#F44336">🔴 ERROR</span>'
+            elif level == "WARN":
+                badge_html = '<span style="color:#FF9800">⚠️ WARN</span>'
+            else:
+                badge_html = f'<span style="color:#9E9E9E">ℹ️ {level}</span>'
             out.append("<details>")
             out.append(
-                f"<summary><strong>[{badge}]</strong>{ts_label} "
+                f"<summary><strong>[{badge_html}]</strong>{ts_label} "
                 f"{content.split(chr(10))[0][:120]}</summary>\n"
             )
             out.append(f"```\n{_clean(content, limit=2000)}\n```\n")
@@ -710,9 +715,9 @@ def main():
         out.append("")
         out.append("<details>")
         out.append(
-            "<summary><strong>Sidechain messages "
+            '<summary><strong><span style="color:#9C27B0">↩️ Sidechain messages '
             f"(abandoned branches) -- {len(sidechain_msgs)} "
-            "entries</strong></summary>\n"
+            "entries</span></strong></summary>\n"
         )
         _render_messages(sidechain_msgs, out)
         out.append("</details>\n")
@@ -721,7 +726,9 @@ def main():
     if agent_files:
         out.append("")
         out.append("---\n")
-        out.append(f"# Subagent Transcripts ({len(agent_files)})\n")
+        out.append(
+            f'# <span style="color:#FF9800">🤖 Subagent Transcripts ({len(agent_files)})</span>\n'
+        )
 
         for agent_path in agent_files:
             # Extract agentId from filename: agent-<id>.jsonl
