@@ -5,8 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/pre_compact_export.sh",
-            "timeout": 30
+            "command": "/export .claude/chat-history/export-$(date +%Y%m%d-%H%M%S).md"
           }
         ]
       }
