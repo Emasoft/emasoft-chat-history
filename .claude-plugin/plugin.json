@@ -1,6 +1,6 @@
 {
   "name": "emasoft-chat-history",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Automatically exports chat transcripts before compaction to preserve conversation history",
   "author": {
     "name": "Emasoft",
