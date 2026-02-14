@@ -31,11 +31,16 @@ _BASE64_RE = re.compile(
 _DATA_URI_RE = re.compile(r"data:[a-zA-Z0-9/+.\-]+;base64,[A-Za-z0-9+/=]+")
 # ANSI escape sequences (colors, cursor, etc.)
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]|\x1b\].*?\x07")
+# <system-reminder>...</system-reminder> blocks (injected by Claude Code)
+_SYSTEM_REMINDER_RE = re.compile(r"<system-reminder>.*?</system-reminder>", re.DOTALL)
+# Compaction marker text
+_COMPACTION_MARKER = "This session is being continued from a previous conversation"
 
 
 # ---------------------------------------------------------------------------
 # Filtering helpers
 # ---------------------------------------------------------------------------
+
 
 def _strip_ansi(text: str) -> str:
     """Remove ANSI escape sequences (colors, cursor moves, etc.)."""
@@ -44,6 +49,7 @@ def _strip_ansi(text: str) -> str:
 
 def _filter_base64(text: str) -> str:
     """Replace base64 blobs and data URIs with size-annotated placeholders."""
+
     def _replace_data_uri(m: re.Match) -> str:
         raw = m.group(0)
         payload = raw.split(",", 1)[1] if "," in raw else ""
@@ -68,11 +74,17 @@ def _is_binary(text: str) -> bool:
     return bad > len(sample) * 0.1
 
 
+def _strip_system_reminders(text: str) -> str:
+    """Replace <system-reminder>...</system-reminder> blocks with a short note."""
+    return _SYSTEM_REMINDER_RE.sub("[system reminder collapsed]", text)
+
+
 def _clean(text: str, limit: int = 3000) -> str:
-    """Filter base64/binary and optionally truncate."""
+    """Filter base64/binary/system-reminders and optionally truncate."""
     if _is_binary(text):
         return "*[binary content filtered]*"
     text = _filter_base64(text)
+    text = _strip_system_reminders(text)
     if len(text) > limit:
         text = text[:limit] + f"\n\n... [{len(text) - limit} more chars truncated]"
     return text
@@ -81,6 +93,7 @@ def _clean(text: str, limit: int = 3000) -> str:
 # ---------------------------------------------------------------------------
 # Timestamp formatting
 # ---------------------------------------------------------------------------
+
 
 def _format_ts(iso_str: str) -> str:
     """Convert ISO-8601 timestamp to a readable local-time string."""
@@ -98,6 +111,7 @@ def _format_ts(iso_str: str) -> str:
 # ---------------------------------------------------------------------------
 # Content extraction
 # ---------------------------------------------------------------------------
+
 
 def _text_from_content(content) -> str:
     """Pull plain text from a content field (string or block list)."""
@@ -117,6 +131,7 @@ def _text_from_content(content) -> str:
 # ---------------------------------------------------------------------------
 # Formatting helpers
 # ---------------------------------------------------------------------------
+
 
 def _tool_summary(name: str, inp: dict) -> str:
     """One-line summary for the <summary> tag."""
@@ -239,7 +254,9 @@ def _parse_debug_log(
                 # Flush previous entry
                 if current is not None and current["level"] in levels:
                     ts = current["timestamp"]
-                    if (not start_ts or ts >= start_ts) and (not end_ts or ts <= end_ts):
+                    if (not start_ts or ts >= start_ts) and (
+                        not end_ts or ts <= end_ts
+                    ):
                         entries.append(current)
                 current = {
                     "timestamp": m.group(1),
@@ -261,6 +278,7 @@ def _parse_debug_log(
 # JSONL reading
 # ---------------------------------------------------------------------------
 
+
 def _read_jsonl(path: str) -> list[dict]:
     """Read a JSONL file and return a list of parsed dicts."""
     entries: list[dict] = []
@@ -273,7 +291,9 @@ def _read_jsonl(path: str) -> list[dict]:
     return entries
 
 
-def _extract_messages(entries: list[dict], session_id: str) -> tuple[list[dict], list[dict]]:
+def _extract_messages(
+    entries: list[dict], session_id: str
+) -> tuple[list[dict], list[dict]]:
     """Extract user/assistant messages from JSONL entries.
 
     Returns (main_messages, sidechain_messages).
@@ -345,9 +365,11 @@ def _build_agent_info(entries: list[dict]) -> dict[str, dict[str, str]]:
         if not isinstance(content, list):
             continue
         for blk in content:
-            if (isinstance(blk, dict)
-                    and blk.get("type") == "tool_use"
-                    and blk.get("name") == "Task"):
+            if (
+                isinstance(blk, dict)
+                and blk.get("type") == "tool_use"
+                and blk.get("name") == "Task"
+            ):
                 inp = blk.get("input", {})
                 task_meta[blk.get("id", "")] = {
                     "subagent_type": inp.get("subagent_type", "unknown"),
@@ -377,9 +399,8 @@ def _build_agent_info(entries: list[dict]) -> dict[str, dict[str, str]]:
 # Rendering
 # ---------------------------------------------------------------------------
 
-def _merge_debug_entries(
-    messages: list[dict], debug_entries: list[dict]
-) -> list[dict]:
+
+def _merge_debug_entries(messages: list[dict], debug_entries: list[dict]) -> list[dict]:
     """Merge debug log entries into the message list, sorted by timestamp.
 
     Debug entries are converted to synthetic message dicts with
@@ -389,12 +410,14 @@ def _merge_debug_entries(
         return messages
     synthetic = []
     for de in debug_entries:
-        synthetic.append({
-            "role": "debug",
-            "content": de["text"],
-            "timestamp": de["timestamp"],
-            "level": de["level"],
-        })
+        synthetic.append(
+            {
+                "role": "debug",
+                "content": de["text"],
+                "timestamp": de["timestamp"],
+                "level": de["level"],
+            }
+        )
     merged = messages + synthetic
     # Sort by ISO timestamp string (both formats are ISO-8601, lexicographic sort works)
     merged.sort(key=lambda m: m.get("timestamp", ""))
@@ -447,8 +470,11 @@ def _render_messages(messages: list[dict], out: list[str]) -> None:
             if isinstance(content, list):
                 has_text = any(
                     (isinstance(b, str) and b.strip())
-                    or (isinstance(b, dict) and b.get("type") == "text"
-                        and b.get("text", "").strip())
+                    or (
+                        isinstance(b, dict)
+                        and b.get("type") == "text"
+                        and b.get("text", "").strip()
+                    )
                     for b in content
                 )
                 if not has_text:
@@ -519,8 +545,10 @@ def _render_messages(messages: list[dict], out: list[str]) -> None:
             level = msg.get("level", "DEBUG")
             badge = "ERROR" if level == "ERROR" else level
             out.append("<details>")
-            out.append(f"<summary><strong>[{badge}]</strong>{ts_label} "
-                       f"{content.split(chr(10))[0][:120]}</summary>\n")
+            out.append(
+                f"<summary><strong>[{badge}]</strong>{ts_label} "
+                f"{content.split(chr(10))[0][:120]}</summary>\n"
+            )
             out.append(f"```\n{_clean(content, limit=2000)}\n```\n")
             out.append("</details>\n")
 
@@ -528,8 +556,66 @@ def _render_messages(messages: list[dict], out: list[str]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Compaction boundary detection
+# ---------------------------------------------------------------------------
+
+
+def _find_last_compaction_index(entries: list[dict]) -> int:
+    """Find the index of the last compaction marker in the transcript.
+
+    Compaction markers are user messages containing the text:
+    "This session is being continued from a previous conversation"
+
+    Returns the index of the last such entry, or 0 if no compaction
+    has occurred (export the full transcript).
+    """
+    last_idx = 0
+    for i, entry in enumerate(entries):
+        if entry.get("type") != "user":
+            continue
+        msg = entry.get("message")
+        if not isinstance(msg, dict):
+            continue
+        content = msg.get("content", "")
+        text = _text_from_content(content)
+        if _COMPACTION_MARKER in text:
+            last_idx = i
+    return last_idx
+
+
+def _filter_agent_files_by_time(agent_files: list[str], start_ts: str) -> list[str]:
+    """Keep only subagent transcript files whose entries fall within the
+    current session segment (after the last compaction).
+
+    Checks the first entry's timestamp in each agent JSONL file.
+    """
+    if not start_ts:
+        return agent_files
+    filtered: list[str] = []
+    for path in agent_files:
+        try:
+            with open(path, "r") as fh:
+                for line in fh:
+                    try:
+                        entry = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    ts = entry.get("timestamp", "")
+                    if ts:
+                        # Keep agent if its first timestamp is within the
+                        # current session segment
+                        if ts >= start_ts:
+                            filtered.append(path)
+                        break
+        except OSError:
+            continue
+    return filtered
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main():
     hook_input = json.load(sys.stdin)
@@ -545,20 +631,27 @@ def main():
         sys.exit(1)
 
     # -- Read main transcript ---------------------------------------------
-    entries = _read_jsonl(transcript_path)
-    if not entries:
+    all_entries = _read_jsonl(transcript_path)
+    if not all_entries:
         print("Empty transcript", file=sys.stderr)
         sys.exit(1)
 
-    # -- Extract messages from main transcript ----------------------------
+    # -- Slice to current session segment (after last compaction) ---------
+    # The JSONL accumulates entries across compactions. Only export the
+    # segment since the most recent compaction event.
+    compact_idx = _find_last_compaction_index(all_entries)
+    entries = all_entries[compact_idx:]
+
+    # -- Extract messages from current segment ----------------------------
     messages, sidechain_msgs = _extract_messages(entries, session_id)
 
     if not messages and not sidechain_msgs:
         print("No messages in transcript", file=sys.stderr)
         sys.exit(1)
 
-    # -- Build agent metadata from main transcript ------------------------
-    # Maps agentId -> {subagent_type, description}
+    # -- Build agent metadata from full transcript ------------------------
+    # Need full transcript to map agentIds to Task metadata (agent may
+    # have been spawned in an earlier turn within the current segment).
     agent_info = _build_agent_info(entries)
 
     # -- Discover subagent transcript files -------------------------------
@@ -568,14 +661,17 @@ def main():
     subagents_dir = os.path.join(transcript_dir, session_id, "subagents")
     agent_files: list[str] = []
     if os.path.isdir(subagents_dir):
-        agent_files = sorted(globmod.glob(
-            os.path.join(subagents_dir, "agent-*.jsonl")
-        ))
+        agent_files = sorted(globmod.glob(os.path.join(subagents_dir, "agent-*.jsonl")))
+
+    # -- Filter agent files to current session segment --------------------
+    # Only include subagent transcripts spawned after the last compaction.
+    session_start, session_end = _session_time_range(entries)
+    if agent_files and session_start:
+        agent_files = _filter_agent_files_by_time(agent_files, session_start)
 
     # -- Load debug log if present -----------------------------------------
     # Debug logs live at ~/.claude/debug/<session_id>.txt
-    # Use the session's first/last message timestamps to filter entries.
-    session_start, session_end = _session_time_range(entries)
+    # Only include entries within the current session segment's time range.
     debug_dir = os.path.join(os.path.expanduser("~"), ".claude", "debug")
     debug_path = os.path.join(debug_dir, f"{session_id}.txt")
     debug_entries: list[dict] = []
@@ -593,6 +689,12 @@ def main():
     out.append(f"- **Session ID:** `{session_id}`")
     out.append(f"- **Exported:** {datetime.now().isoformat()}")
     out.append(f"- **Transcript:** `{transcript_path}`")
+    if compact_idx > 0:
+        out.append(
+            "- **Note:** prior compactions detected; exporting only current segment"
+        )
+    if session_start:
+        out.append(f"- **Segment start:** {_format_ts(session_start)}")
     if agent_files:
         out.append(f"- **Subagent transcripts:** {len(agent_files)}")
     if debug_entries:
@@ -607,9 +709,11 @@ def main():
     if sidechain_msgs:
         out.append("")
         out.append("<details>")
-        out.append("<summary><strong>Sidechain messages "
-                   f"(abandoned branches) -- {len(sidechain_msgs)} "
-                   "entries</strong></summary>\n")
+        out.append(
+            "<summary><strong>Sidechain messages "
+            f"(abandoned branches) -- {len(sidechain_msgs)} "
+            "entries</strong></summary>\n"
+        )
         _render_messages(sidechain_msgs, out)
         out.append("</details>\n")
 
@@ -632,15 +736,11 @@ def main():
             # Read and parse agent transcript
             agent_entries = _read_jsonl(agent_path)
             # Agent entries share the parent sessionId; pass it through
-            agent_msgs, agent_side = _extract_messages(
-                agent_entries, session_id
-            )
+            agent_msgs, agent_side = _extract_messages(agent_entries, session_id)
             # If session filter yields nothing, try without filter
             # (some agent entries may not have sessionId set)
             if not agent_msgs and not agent_side:
-                agent_msgs, agent_side = _extract_messages_unfiltered(
-                    agent_entries
-                )
+                agent_msgs, agent_side = _extract_messages_unfiltered(agent_entries)
 
             total = len(agent_msgs) + len(agent_side)
             if total == 0:
