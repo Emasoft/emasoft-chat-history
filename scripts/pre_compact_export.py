@@ -424,13 +424,28 @@ def _merge_debug_entries(messages: list[dict], debug_entries: list[dict]) -> lis
     return merged
 
 
-def _render_messages(messages: list[dict], out: list[str]) -> None:
+def _render_messages(
+    messages: list[dict], out: list[str], *, is_subagent: bool = False
+) -> None:
     """Render a list of parsed messages into markdown lines.
 
     Each message dict has: role, content, timestamp.
     content is either a string or a list of content blocks.
     Debug entries have role="debug" and a "level" field.
+
+    When is_subagent=True, assistant messages use a distinct orange color
+    and "SUB-AGENT" label to visually separate them from the main assistant.
     """
+    # Color palette for message body borders and headers
+    user_color = "#2196F3"       # Material Blue — user text
+    if is_subagent:
+        assistant_color = "#FF9800"  # Material Orange — sub-agent text
+        assistant_icon = "◈"
+        assistant_label = "SUB-AGENT"
+    else:
+        assistant_color = "#FFC107"  # Material Amber — main assistant text
+        assistant_icon = "◇"
+        assistant_label = "ASSISTANT"
     # -- Build a lookup of tool results keyed by tool_use_id ---------------
     # User messages may contain tool_result blocks that pair with
     # tool_use blocks in the preceding assistant message.
@@ -480,16 +495,29 @@ def _render_messages(messages: list[dict], out: list[str]) -> None:
                 if not has_text:
                     continue
 
-            out.append(f'## <span style="color:#2196F3">◆ USER</span>{ts_label}\n')
+            out.append(f'## <span style="color:{user_color}">◆ USER</span>{ts_label}\n')
             text = _text_from_content(content)
             if text.strip():
-                out.append(_clean(text) + "\n")
+                # Colored left border wraps user body text for visual distinction
+                out.append(
+                    f'<div style="border-left: 4px solid {user_color}; '
+                    f'padding-left: 12px; margin: 4px 0;">\n\n'
+                    f'{_clean(text)}\n\n</div>\n'
+                )
 
         elif role == "assistant":
-            out.append(f'## <span style="color:#4CAF50">◇ ASSISTANT</span>{ts_label}\n')
+            out.append(
+                f'## <span style="color:{assistant_color}">{assistant_icon} '
+                f'{assistant_label}</span>{ts_label}\n'
+            )
 
             if isinstance(content, str):
-                out.append(_clean(content) + "\n")
+                # Colored left border wraps assistant body text
+                out.append(
+                    f'<div style="border-left: 4px solid {assistant_color}; '
+                    f'padding-left: 12px; margin: 4px 0;">\n\n'
+                    f'{_clean(content)}\n\n</div>\n'
+                )
                 continue
 
             if not isinstance(content, list):
@@ -499,7 +527,11 @@ def _render_messages(messages: list[dict], out: list[str]) -> None:
             for blk in content:
                 if isinstance(blk, str):
                     if blk.strip():
-                        out.append(_clean(blk) + "\n")
+                        out.append(
+                            f'<div style="border-left: 4px solid {assistant_color}; '
+                            f'padding-left: 12px; margin: 4px 0;">\n\n'
+                            f'{_clean(blk)}\n\n</div>\n'
+                        )
                     continue
 
                 if not isinstance(blk, dict):
@@ -510,7 +542,11 @@ def _render_messages(messages: list[dict], out: list[str]) -> None:
                 if btype == "text":
                     txt = blk.get("text", "")
                     if txt.strip():
-                        out.append(_clean(txt) + "\n")
+                        out.append(
+                            f'<div style="border-left: 4px solid {assistant_color}; '
+                            f'padding-left: 12px; margin: 4px 0;">\n\n'
+                            f'{_clean(txt)}\n\n</div>\n'
+                        )
 
                 elif btype == "tool_use":
                     tool_name = blk.get("name", "unknown")
@@ -761,7 +797,8 @@ def main():
 
             out.append("<details>")
             out.append(f"<summary><strong>{label}</strong></summary>\n")
-            _render_messages(agent_msgs + agent_side, out)
+            # Sub-agent messages use distinct orange color to separate from main assistant
+            _render_messages(agent_msgs + agent_side, out, is_subagent=True)
             out.append("</details>\n")
 
     # -- Write export file ------------------------------------------------
