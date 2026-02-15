@@ -80,13 +80,30 @@ def _strip_system_reminders(text: str) -> str:
 
 
 def _clean(text: str, limit: int = 3000) -> str:
-    """Filter base64/binary/system-reminders and optionally truncate."""
+    """Filter base64/binary/system-reminders, preserve line breaks, truncate."""
     if _is_binary(text):
         return "*[binary content filtered]*"
     text = _filter_base64(text)
     text = _strip_system_reminders(text)
     if len(text) > limit:
         text = text[:limit] + f"\n\n... [{len(text) - limit} more chars truncated]"
+    # Force hard line breaks in markdown: single newlines (not paragraph breaks)
+    # get two trailing spaces so markdown renderers produce a <br>.  This prevents
+    # lists and multi-line text from collapsing into a single line.
+    # Skip lines inside fenced code blocks to avoid altering code.
+    lines = text.split("\n")
+    result: list[str] = []
+    in_code = False
+    for line in lines:
+        if line.strip().startswith("```") or line.strip().startswith("~~~"):
+            in_code = not in_code
+            result.append(line)
+        elif in_code:
+            result.append(line)
+        else:
+            # Trailing two spaces = markdown hard line break
+            result.append(line + "  " if line.strip() else line)
+    text = "\n".join(result)
     return text
 
 
